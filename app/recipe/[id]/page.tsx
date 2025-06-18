@@ -1,7 +1,20 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
-async function getRecipe(id: string) {
+type Meal = {
+  idMeal: string;
+  strMeal: string;
+  strMealThumb: string;
+  strArea: string;
+  strCategory: string;
+  strInstructions: string;
+  strYoutube?: string;
+  [key: `strIngredient${number}`]: string;
+  [key: `strMeasure${number}`]: string;
+};
+
+async function getRecipe(id: string): Promise<Meal | undefined> {
   const res = await fetch(
     `https://www.themealdb.com/api/json/v1/1/lookup.php?i=${id}`
   );
@@ -9,21 +22,36 @@ async function getRecipe(id: string) {
   return data.meals?.[0];
 }
 
-export default async function RecipePage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export async function generateMetadata({ params }: { params: { id: string } }) {
   const meal = await getRecipe(params.id);
 
+  return {
+    title: meal?.strMeal || "Recipe Not Found",
+    description: meal
+      ? `Learn how to make ${meal.strMeal}, a delicious ${meal.strCategory} dish from ${meal.strArea}`
+      : "The requested recipe could not be found",
+    ...(meal?.strMealThumb && {
+      openGraph: {
+        images: [meal.strMealThumb],
+      },
+    }),
+  };
+}
+
+interface PageProps {
+  params: { id: string };
+  searchParams?: Record<string, string | string[] | undefined>;
+}
+
+export default async function RecipePage({ params }: PageProps) {
+  const meal = await getRecipe(params.id);
   if (!meal) return notFound();
 
-  const ingredients = [];
-  for (let i = 1; i <= 20; i++) {
-    const ing = meal[`strIngredient${i}`];
-    const measure = meal[`strMeasure${i}`];
-    if (ing && ing.trim()) ingredients.push(`${measure} ${ing}`);
-  }
+  const ingredients = Array.from({ length: 20 }, (_, i) => {
+    const ing = meal[`strIngredient${i + 1}`];
+    const measure = meal[`strMeasure${i + 1}`];
+    return ing?.trim() ? `${measure} ${ing}` : null;
+  }).filter(Boolean) as string[];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
@@ -47,10 +75,13 @@ export default async function RecipePage({
         {/* Hero Section */}
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden mb-8 border border-orange-100">
           <div className="relative">
-            <img
+            <Image
               src={meal.strMealThumb}
               alt={meal.strMeal}
+              width={800}
+              height={450}
               className="w-full h-64 md:h-80 object-cover"
+              priority
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
 
@@ -61,17 +92,11 @@ export default async function RecipePage({
                   {meal.strMeal}
                 </h1>
                 <div className="flex flex-wrap gap-3">
-                  <span
-                    className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 
-                                   px-4 py-2 rounded-full font-semibold"
-                  >
+                  <span className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-2 rounded-full font-semibold">
                     <span>🌍</span>
                     {meal.strArea}
                   </span>
-                  <span
-                    className="inline-flex items-center gap-2 bg-red-100 text-red-700 
-                                   px-4 py-2 rounded-full font-semibold"
-                  >
+                  <span className="inline-flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-full font-semibold">
                     <span>🍽️</span>
                     {meal.strCategory}
                   </span>
@@ -80,7 +105,6 @@ export default async function RecipePage({
             </div>
           </div>
         </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Ingredients Section */}
           <div className="lg:col-span-1">
@@ -148,6 +172,7 @@ export default async function RecipePage({
                     className="w-full aspect-video"
                     src={meal.strYoutube.replace("watch?v=", "embed/")}
                     frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                     title={`${meal.strMeal} cooking tutorial`}
                   />
